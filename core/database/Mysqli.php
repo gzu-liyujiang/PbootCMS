@@ -10,7 +10,7 @@ namespace core\database;
 
 use core\basic\Config;
 
-class Mysqli implements Builder
+class Mysqli implements Builder, Transaction
 {
 
     protected static $mysqli;
@@ -22,7 +22,8 @@ class Mysqli implements Builder
     protected $begin = false;
 
     private function __construct()
-    {}
+    {
+    }
 
     public function __destruct()
     {
@@ -34,7 +35,7 @@ class Mysqli implements Builder
     // 获取单一实例，使用单一实例数据库连接类
     public static function getInstance()
     {
-        if (! self::$mysqli) {
+        if (!self::$mysqli) {
             self::$mysqli = new self();
         }
         return self::$mysqli;
@@ -43,19 +44,19 @@ class Mysqli implements Builder
     // 连接数据库，接受数据库连接参数，返回数据库连接对象
     public function conn($cfg)
     {
-        if (! extension_loaded('mysqli')) {
+        if (!extension_loaded('mysqli')) {
             if (extension_loaded('pdo_mysql')) {
                 error('未检测到您服务器环境的mysqli数据库扩展，请检查php.ini中是否已经开启该扩展！<br>另外，检测到您服务器支持pdo_mysql扩展，您也可以修改数据库配置连接驱动为pdo_mysql试试！');
             } else {
                 error('未检测到您服务器环境的mysqli数据库扩展，请检查php.ini中是否已经开启该扩展！');
             }
         }
-        
+
         // 优化>php5.3版本 在win2008以上服务器连接
         if ($cfg['host'] == 'localhost') {
             $cfg['host'] = '127.0.0.1';
         }
-        
+
         $conn = @new \Mysqli($cfg['host'], $cfg['user'], $cfg['passwd'], $cfg['dbname'], $cfg['port']);
         if (mysqli_connect_errno()) {
             error("连接数据库服务器失败：" . iconv('gbk', 'utf-8', mysqli_connect_error()));
@@ -80,26 +81,33 @@ class Mysqli implements Builder
         $this->begin = false; // 关闭事务模式
     }
 
+    public function rollback()
+    {
+        $this->master->rollback(); // 回滚事务
+        $this->master->autocommit(true); // 回滚后恢复自动提交
+        $this->begin = false; // 关闭事务模式
+    }
+
     // 执行SQL语句,接受完整SQL语句，返回结果集对象
     public function query($sql, $type = 'master')
     {
         $time_s = microtime(true);
         switch ($type) {
             case 'master':
-                if (! $this->master) {
+                if (!$this->master) {
                     $cfg = Config::get('database');
                     $this->master = $this->conn($cfg);
                     $this->master->query("SET sql_mode='NO_ENGINE_SUBSTITUTION'"); // 写入规避严格模式
                 }
-                if (Config::get('database.transaction') && ! $this->begin) { // 根据配置开启mysql事务，注意需要是InnoDB引擎
+                if (Config::get('database.transaction') && !$this->begin) { // 根据配置开启mysql事务，注意需要是InnoDB引擎
                     $this->begin();
                 }
                 $result = $this->master->query($sql) or $this->error($sql, 'master');
                 break;
             case 'slave':
-                if (! $this->slave) {
+                if (!$this->slave) {
                     // 未设置从服务器时直接读取主数据库配置
-                    if (! $cfg = Config::get('database.slave')) {
+                    if (!$cfg = Config::get('database.slave')) {
                         $cfg = Config::get('database');
                     } else {
                         // 随机选择从数据库
@@ -133,7 +141,7 @@ class Mysqli implements Builder
     {
         $sql = "SELECT count(*) FROM $table";
         $result = $this->query($sql, 'slave');
-        if (! ! $row = $result->fetch_array(2)) {
+        if (!!$row = $result->fetch_array(2)) {
             $result->free();
             return $row[0];
         } else {
@@ -164,7 +172,7 @@ class Mysqli implements Builder
         $result = $this->query($sql, 'slave');
         $rows = array();
         if ($this->slave->affected_rows) {
-            while (! ! $row = $result->fetch_object()) {
+            while (!!$row = $result->fetch_object()) {
                 $rows[] = $row->Field;
             }
             $result->free();
@@ -202,11 +210,11 @@ class Mysqli implements Builder
         $rows = array();
         if ($this->slave->affected_rows) {
             if ($type) {
-                while (! ! $array = $result->fetch_array($type)) { // 关联数组或数字数组或同时
+                while (!!$array = $result->fetch_array($type)) { // 关联数组或数字数组或同时
                     $rows[] = $array;
                 }
             } else {
-                while (! ! $objects = $result->fetch_object()) {
+                while (!!$objects = $result->fetch_object()) {
                     $rows[] = $objects;
                 }
             }
@@ -261,7 +269,8 @@ class Mysqli implements Builder
     }
 
     //返回对象结果集
-    public function fetchQuery($obj){
+    public function fetchQuery($obj)
+    {
         return $obj->fetch_all();
     }
 }

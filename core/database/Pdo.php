@@ -10,7 +10,7 @@ namespace core\database;
 
 use core\basic\Config;
 
-class Pdo implements Builder
+class Pdo implements Builder, Transaction
 {
 
     protected static $pdo;
@@ -22,7 +22,8 @@ class Pdo implements Builder
     protected $begin = false;
 
     private function __construct()
-    {}
+    {
+    }
 
     public function __destruct()
     {
@@ -34,7 +35,7 @@ class Pdo implements Builder
     // 获取单一实例，使用单一实例数据库连接类
     public static function getInstance()
     {
-        if (! self::$pdo) {
+        if (!self::$pdo) {
             self::$pdo = new self();
         }
         return self::$pdo;
@@ -43,20 +44,20 @@ class Pdo implements Builder
     // 连接数据库，接受数据库连接参数，返回数据库连接对象
     public function conn($cfg)
     {
-        if (get_db_type() == 'sqlite' && ! extension_loaded('pdo_sqlite')) {
+        if (get_db_type() == 'sqlite' && !extension_loaded('pdo_sqlite')) {
             if (extension_loaded('SQLite3')) {
                 error('未检测到您服务器环境的pdo_sqlite数据库扩展，请检查php.ini中是否已经开启该扩展！<br>另外，检测到您服务器支持sqlite3扩展，您也可以修改数据库配置连接驱动为sqlite试试！');
             } else {
                 error('未检测到您服务器环境的pdo_sqlite数据库扩展，请检查php.ini中是否已经开启对应的数据库扩展！');
             }
-        } elseif (get_db_type() == 'mysql' && ! extension_loaded('pdo_mysql')) {
+        } elseif (get_db_type() == 'mysql' && !extension_loaded('pdo_mysql')) {
             if (extension_loaded('mysqli')) {
                 error('未检测到您服务器环境的pdo_mysqli数据库扩展，请检查php.ini中是否已经开启该扩展！<br>另外，检测到您服务器支持mysqli扩展，您也可以修改数据库配置连接驱动为mysqli试试！');
             } else {
                 error('未检测到您服务器环境的pdo_mysqli数据库扩展，请检查php.ini中是否已经开启对应的数据库扩展！');
             }
         }
-        
+
         $charset = Config::get('database.charset') ?: 'utf8';
         switch (Config::get('database.type')) {
             case 'pdo_mysql':
@@ -109,36 +110,42 @@ class Pdo implements Builder
         $this->begin = false;
     }
 
+    public function rollback()
+    {
+        $this->master->rollBack();
+        $this->begin = false;
+    }
+
     // 执行SQL语句,接受完整SQL语句，返回结果集对象
     public function query($sql, $type = 'master')
     {
         $time_s = microtime(true);
         switch ($type) {
             case 'master':
-                if (! $this->master) {
+                if (!$this->master) {
                     $cfg = Config::get('database');
                     $this->master = $this->conn($cfg);
                     if ($cfg['type'] == 'pdo_mysql') {
                         $this->master->exec("SET sql_mode='NO_ENGINE_SUBSTITUTION'"); // MySql写入规避严格模式
                     }
                 }
-                
+
                 // sqlite时自动启动事务
-                if ($cfg['type'] == 'pdo_sqlite' && ! $this->begin) {
+                if ($cfg['type'] == 'pdo_sqlite' && !$this->begin) {
                     $this->begin();
-                } elseif ($cfg['type'] == 'pdo_mysql' && Config::get('database.transaction') && ! $this->begin) { // 根据配置开启mysql事务，注意需要是InnoDB引擎
+                } elseif ($cfg['type'] == 'pdo_mysql' && Config::get('database.transaction') && !$this->begin) { // 根据配置开启mysql事务，注意需要是InnoDB引擎
                     $this->begin();
                 }
-                
+
                 $result = $this->master->query($sql);
                 if ($result === false) {
                     $this->error($sql, 'master');
                 }
                 break;
             case 'slave':
-                if (! $this->slave) {
+                if (!$this->slave) {
                     // 未设置从服务器时直接读取主数据库配置
-                    if (! $cfg = Config::get('database.slave')) {
+                    if (!$cfg = Config::get('database.slave')) {
                         $cfg = Config::get('database');
                     } else {
                         // 随机选择从数据库
@@ -171,7 +178,7 @@ class Pdo implements Builder
     {
         $sql = "SELECT count(*) FROM $table";
         $result = $this->query($sql, 'slave');
-        if (! ! $row = $result->fetch(\PDO::FETCH_NUM)) {
+        if (!!$row = $result->fetch(\PDO::FETCH_NUM)) {
             return $row[0];
         } else {
             return 0;
@@ -202,21 +209,21 @@ class Pdo implements Builder
             case 'pdo_mysql':
                 $sql = "describe $table";
                 $result = $this->query($sql, 'slave');
-                while (! ! $row = $result->fetchObject()) {
+                while (!!$row = $result->fetchObject()) {
                     $rows[] = $row->Field;
                 }
                 break;
             case 'pdo_sqlite':
                 $sql = "pragma table_info($table)";
                 $result = $this->query($sql, 'slave');
-                while (! ! $row = $result->fetchObject()) {
+                while (!!$row = $result->fetchObject()) {
                     $rows[] = $row->name;
                 }
                 break;
             case 'pdo_pgsql':
                 $sql = "SELECT column_name FROM information_schema.columns WHERE table_name ='$table'";
                 $result = $this->query($sql, 'slave');
-                while (! ! $row = $result->fetchObject()) {
+                while (!!$row = $result->fetchObject()) {
                     $rows[] = $row->column_name;
                 }
                 break;
@@ -235,7 +242,7 @@ class Pdo implements Builder
         $result = $this->query($sql, 'slave');
         $row = array();
         if ($type) {
-            $type ++; // 与mysqli统一返回类型设置
+            $type++; // 与mysqli统一返回类型设置
             $row = $result->fetch($type);
         } else {
             $row = $result->fetchObject();
@@ -252,10 +259,10 @@ class Pdo implements Builder
         $result = $this->query($sql, 'slave');
         $rows = array();
         if ($type) {
-            $type ++; // 与mysqli统一返回类型设置
+            $type++; // 与mysqli统一返回类型设置
             $rows = $result->fetchAll($type);
         } else {
-            while (! ! $row = $result->fetchObject()) {
+            while (!!$row = $result->fetchObject()) {
                 $rows[] = $row;
             }
         }
@@ -310,7 +317,8 @@ class Pdo implements Builder
     }
 
     //返回对象结果集
-    public function fetchQuery($obj){
+    public function fetchQuery($obj)
+    {
         return $obj->fetchAll();
     }
 }

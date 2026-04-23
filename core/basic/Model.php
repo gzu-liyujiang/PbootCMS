@@ -166,8 +166,6 @@ class Model
 
     /**
      * 提交事务（非连贯，直接调用）
-     *
-     * @return \core\basic\Model
      */
     final public function commit()
     {
@@ -175,9 +173,17 @@ class Model
     }
 
     /**
+     * 回滚事务（非连贯，直接调用）
+     */
+    final public function rollback()
+    {
+        $this->getDb()->rollback();
+    }
+
+    /**
      * 内容输出
      *
-     * @param mixed $data
+     * @param mixed $result
      * @return mixed
      */
     final protected function outData($result)
@@ -431,7 +437,7 @@ class Model
     /**
      * 连贯操作：设置EXISTS查询
      *
-     * @param string $subsql
+     * @param string $subSql
      *            传递子查询
      * @return \core\basic\Model
      */
@@ -541,7 +547,7 @@ class Model
      *            匹配关键字
      * @param string $matchType
      *            匹配模式，默认为all,可选left,right,equal
-     * @return \core\database\Operate
+     * @return \core\basic\Model
      */
     final public function like($field, $keyword, $matchType = "all")
     {
@@ -592,7 +598,7 @@ class Model
      *            匹配关键字
      * @param string $matchType
      *            匹配模式，默认为all,可选left,right
-     * @return \core\database\Operate
+     * @return \core\basic\Model
      */
     final public function notLike($field, $keyword, $matchType = "all")
     {
@@ -910,7 +916,7 @@ class Model
      *
      * @param string $type
      *            可选传递1,2,3返回不同格式数据数组
-     * @return array
+     * @return mixed
      */
     final public function select($type = null)
     {
@@ -978,7 +984,7 @@ class Model
      *
      * @param string $type
      *            可选传递1,2,3返回不同格式数据数组
-     * @return string|boolean|string
+     * @return mixed
      */
     final public function find($type = null)
     {
@@ -1002,7 +1008,7 @@ class Model
     /**
      * 返回指定字段数据数组
      *
-     * @param string $name
+     * @param string $fields
      *            字段名字符串或数字数组，单个字段，返回一维数组，如果多个字段，返回二维数组数
      * @param string $key
      *            指定返回数组的键值字段
@@ -1048,7 +1054,7 @@ class Model
     /**
      * 返回指定字段的一条数据的值模式
      *
-     * @param string $name
+     * @param string $field
      *            字段名
      * @return string 返回字段值
      */
@@ -1068,7 +1074,7 @@ class Model
     /**
      * 返回指定列最大值
      *
-     * @param string $name
+     * @param string $field
      *            字段名
      * @return boolean
      */
@@ -1083,7 +1089,7 @@ class Model
     /**
      * 返回指定列最小值
      *
-     * @param string $name
+     * @param string $field
      *            字段名
      * @return boolean
      */
@@ -1098,7 +1104,7 @@ class Model
     /**
      * 返回指定列平均值
      *
-     * @param string $name
+     * @param string $field
      *            字段名
      * @return boolean
      */
@@ -1113,7 +1119,7 @@ class Model
     /**
      * 返回指定列合计值
      *
-     * @param string $name
+     * @param string $field
      *            字段名
      * @return boolean
      */
@@ -1167,7 +1173,7 @@ class Model
         if (is_array($data)) {
 
             if (!$data)
-                return;
+                return false;
             if (count($data) == count($data, 1)) { // 单条数据
                 $keys = '';
                 $values = '';
@@ -1254,7 +1260,7 @@ class Model
             }
             $sql = $this->buildSql($this->insertFromSql);
         } else {
-            return;
+            return false;
         }
 
         $sql = preg_replace_r('/pboot:if/i', 'pboot@if', $sql); // 过滤插入cms条件语句
@@ -1271,7 +1277,7 @@ class Model
      *            是否启用批量一次插入功能，默认true
      * @return number|string|boolean
      */
-    final public function insertGetId(array $data = null, $batch = true)
+    final public function insertGetId(array $data, $batch = true)
     {
         if ($this->insert($data, $batch)) {
             return $this->getDb()->insertId();

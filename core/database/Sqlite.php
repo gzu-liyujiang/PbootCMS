@@ -10,7 +10,7 @@ namespace core\database;
 
 use core\basic\Config;
 
-class Sqlite implements Builder
+class Sqlite implements Builder, Transaction
 {
 
     protected static $sqlite;
@@ -21,19 +21,20 @@ class Sqlite implements Builder
 
     private $begin = false;
     private function __construct()
-    {}
+    {
+    }
 
     public function __destruct()
     {
         if ($this->begin) { // 存在待提交的事务时自动进行提交
-            $this->master->exec('commit;');
+            $this->commit();
         }
     }
 
     // 获取单一实例，使用单一实例数据库连接类
     public static function getInstance()
     {
-        if (! self::$sqlite) {
+        if (!self::$sqlite) {
             self::$sqlite = new self();
         }
         return self::$sqlite;
@@ -59,11 +60,30 @@ class Sqlite implements Builder
         return $conn;
     }
 
+    // 关闭自动提交，开启事务模式
+    public function begin()
+    {
+        $this->begin = true;
+    }
+
+    // 提交事务
+    public function commit()
+    {
+        $this->master->exec('commit;');
+        $this->begin = false;
+    }
+
+    public function rollback()
+    {
+        $this->master->exec('rollback;');
+        $this->begin = false;
+    }
+
     // 执行SQL语句,接受完整SQL语句，返回结果集对象
     public function query($sql, $type = 'master')
     {
         $time_s = microtime(true);
-        if (! $this->master || ! $this->slave) {
+        if (!$this->master || !$this->slave) {
             $cfg = ROOT_PATH . Config::get('database.dbname');
             $conn = $this->conn($cfg);
             $this->master = $conn;
@@ -71,7 +91,7 @@ class Sqlite implements Builder
         }
         switch ($type) {
             case 'master':
-                if (! $this->begin) { // 存在写入时自动开启显式事务，提高写入性能
+                if (!$this->begin) { // 存在写入时自动开启显式事务，提高写入性能
                     $this->master->exec('begin;');
                     $this->begin = true;
                 }
@@ -101,7 +121,7 @@ class Sqlite implements Builder
     {
         $sql = "SELECT count(*) FROM $table";
         $result = $this->query($sql, 'slave');
-        if (! ! $row = $result->fetchArray(2)) {
+        if (!!$row = $result->fetchArray(2)) {
             $result->finalize();
             return $row[0];
         } else {
@@ -131,7 +151,7 @@ class Sqlite implements Builder
         $sql = "pragma table_info($table)";
         $result = $this->query($sql, 'slave');
         $rows = array();
-        while (! ! $row = $result->fetchArray(SQLITE3_ASSOC)) {
+        while (!!$row = $result->fetchArray(SQLITE3_ASSOC)) {
             $rows[] = $row['name'];
         }
         $result->finalize();
@@ -141,15 +161,15 @@ class Sqlite implements Builder
     // 查询一条数据模型，接受完整SQL语句，有数据返回对象数组，否则空数组
     public function one($sql, $type = null)
     {
-        if (! $type) {
+        if (!$type) {
             $my_type = SQLITE3_ASSOC;
         } else {
             $my_type = $type;
         }
         $row = array();
         $result = $this->query($sql, 'slave');
-        if (! ! $row = $result->fetchArray($my_type)) {
-            if (! $type && $row) {
+        if (!!$row = $result->fetchArray($my_type)) {
+            if (!$type && $row) {
                 $out = new \stdClass();
                 foreach ($row as $key => $value) {
                     $out->$key = $value;
@@ -164,15 +184,15 @@ class Sqlite implements Builder
     // 查询多条数据模型，接受完整SQL语句，有数据返回二维对象数组，否则空数组
     public function all($sql, $type = null)
     {
-        if (! $type) {
+        if (!$type) {
             $my_type = SQLITE3_ASSOC;
         } else {
             $my_type = $type;
         }
         $result = $this->query($sql, 'slave');
         $rows = array();
-        while (! ! $row = $result->fetchArray($my_type)) {
-            if (! $type && $row) {
+        while (!!$row = $result->fetchArray($my_type)) {
+            if (!$type && $row) {
                 $out = new \stdClass();
                 foreach ($row as $key => $value) {
                     $out->$key = $value;
@@ -221,8 +241,7 @@ class Sqlite implements Builder
     {
         $err = '错误：' . $this->$conn->lastErrorMsg();
         if ($this->begin) { // 存在显式开启事务时进行回滚
-            $this->master->exec('rollback;');
-            $this->begin = false;
+            $this->rollback();
         }
         // error('执行SQL发生错误！' . $err . '语句：' . $sql);
         error('执行SQL发生错误！' . $err);
