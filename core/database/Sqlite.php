@@ -241,7 +241,8 @@ class Sqlite implements Builder, Transaction
     {
         $err = '错误：' . $this->$conn->lastErrorMsg();
         if ($this->begin) { // 存在显式开启事务时进行回滚
-            $this->rollback();
+            $this->$conn->exec('rollback;');
+            $this->begin = false;
         }
         // error('执行SQL发生错误！' . $err . '语句：' . $sql);
         error('执行SQL发生错误！' . $err);
