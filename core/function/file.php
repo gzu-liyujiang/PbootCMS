@@ -212,9 +212,16 @@ function is_image($path)
  */
 function upload($input_name, $file_ext = null, $max_width = null, $max_height = null, $watermark = false)
 {
+    // 检测 POST 数据是否超过限制
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && empty($_FILES)) {
+        $contentLength = intval($_SERVER['CONTENT_LENGTH']);
+        if ($contentLength > 0) {
+            return '上传文件过大，服务器最大允许' . ini_get('post_max_size') . '！';
+        }
+    }
     // 未选择文件返回空
     if (! isset($_FILES[$input_name])) {
-        return '文件超过PHP环境允许的大小！';
+        return '请指定要上传的文件！';
     } else {
         $files = $_FILES[$input_name];
     }
