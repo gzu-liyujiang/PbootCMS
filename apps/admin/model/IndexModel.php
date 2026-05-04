@@ -79,6 +79,7 @@ class IndexModel extends Model
             );
             $result = parent::table('ay_menu')->distinct()
                 ->field($field)
+                ->where(['status' => 1])
                 ->order($order)
                 ->select();
         } else {
@@ -105,7 +106,8 @@ class IndexModel extends Model
                 "ay_user.ucode=ay_user_role.ucode",
                 "ay_role.rcode=ay_user_role.rcode",
                 "ay_role.rcode=ay_role_level.rcode",
-                "ay_menu.url=ay_role_level.level"
+                "ay_menu.url=ay_role_level.level",
+                "ay_menu.status=1"
             );
             $order = array(
                 'ay_menu.sorting',
