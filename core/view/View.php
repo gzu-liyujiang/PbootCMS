@@ -111,6 +111,11 @@ class View
             }
             $tpl_file = $this->tplPath . '/' . $file; // 模板文件
         }
+        // 类 Smarty 模板语法，使用 Smarty 模板的扩展名，以便安装 Smarty Template Support 插件进行高亮及格式化代码
+        $smarty_file = str_replace('.html', '.tpl', $tpl_file);
+        if (file_exists($smarty_file)) {
+            $tpl_file = $smarty_file;
+        }
         $note = Config::get('tpl_html_dir') ? '<br>同时检测到您后台配置中配置了模板子目录，请核对是否是此原因导致！' : '';
         file_exists($tpl_file) ?: error('模板文件' . basename($file) . '不存在！' . $note);
         $tpl_c_file = $this->tplcPath . '/' . md5($tpl_file) . '.php'; // 编译文件
